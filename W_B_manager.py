@@ -18,10 +18,10 @@ class W_B_MANAGER:
         self.item_size = data_size.ITEM_ID.value
 
     def new(self, W_dim) :
-        W_user_id = np.zeros([self.user_size, W_dim])
-        B_user_id = np.zeros([self.user_size, ])
-        W_item_id = np.zeros([self.item_size, W_dim])
-        B_item_id = np.zeros([self.item_size, ])
+        W_user_id = np.ones([self.user_size, W_dim])
+        B_user_id = np.ones([self.user_size, ])
+        W_item_id = np.ones([self.item_size, W_dim])
+        B_item_id = np.ones([self.item_size, ])
         '''
         truc = truncnorm(-2, 2, loc = 0.0, scale = 1.0)
         W_user_id = truc.rvs(self.user_size * W_dim).reshape([self.user_size, W_dim])

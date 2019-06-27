@@ -73,6 +73,7 @@ class CONTEXT_FM:
         self.loss
         self.temp_loss
         self.optimize
+        self.optimize_user
         self.rank
         self.prediction
         self.reciprocal_rank
@@ -82,9 +83,10 @@ class CONTEXT_FM:
     def assign_var(self) :
         ass_W_user = tf.assign(self.W_user_id, self.W_user_id_ph)
         ass_B_user = tf.assign(self.B_user_id, self.B_user_id_ph)
-        ass_W_item = tf.assign(self.W_item_id, self.W_item_id_ph)
-        ass_B_item = tf.assign(self.B_item_id, self.B_item_id_ph)
-        return ass_W_user, ass_B_user, ass_W_item, ass_B_item
+        #ass_W_item = tf.assign(self.W_item_id, self.W_item_id_ph)
+        #ass_B_item = tf.assign(self.B_item_id, self.B_item_id_ph)
+        #return ass_W_user, ass_B_user, ass_W_item, ass_B_item
+        return ass_W_user, ass_B_user
         
     def define_emb_W(self) :
         num_item = tf.shape(self.interaction)[0]
@@ -119,30 +121,50 @@ class CONTEXT_FM:
         num_item = tf.shape(self.interaction)[0]
         return [self.B_global, self.platform_emb_B,  self.device_emb_B,  self.interaction_emb_B, self.price_emb_B,  self.item_property_emb_B, self.B_item_id[:num_item]]
 
-    @lazy_property
-    def logits(self):
-        num_item = tf.shape(self.interaction)[0]
+    def calc_fm(self, emb_W_list, emb_B_list) :
         with tf.name_scope('first_term') as scope : 
-            emb_W_list = self.choose_emb_W()
             emb_W_sum = tf.constant(0.0, shape = [self.W_dim, ])  
             for emb_W in emb_W_list : emb_W_sum += emb_W
             emb_W_sum_square_sum = tf.reduce_sum( tf.square(emb_W_sum) , axis = 1)  #(None, )
 
         with tf.name_scope('second_term') as scope : 
-            emb_W_list = self.choose_emb_W()
             emb_W_sum_square = tf.constant(0.0, shape = ())  
             for emb_W in emb_W_list : emb_W_sum_square += tf.reduce_sum(tf.square(emb_W), axis = -1)
 
         with tf.name_scope('emb_B_sum') as scope : 
-            emb_B_list = self.choose_emb_B()
             emb_B_sum = tf.constant(0.0, shape = [self.W_dim, ])  
             for emb_B in emb_B_list : emb_B_sum += emb_B
 
         with tf.name_scope('logit') as scope : 
-            logit = emb_W_sum_square_sum - emb_W_sum_square + emb_B
+            #logit = emb_W_sum_square_sum - emb_W_sum_square + emb_B
+            logit = emb_W_sum_square_sum - emb_W_sum_square
 
         return logit
 
+    '''
+    @lazy_property
+    def logits(self):
+        emb_W_list = self.choose_emb_W()
+        emb_B_list = self.choose_emb_B()
+        logits = self.calc_fm(emb_W_list, emb_B_list)
+        return logits
+    '''
+
+    @lazy_property
+    #def logits_with_user(self):
+    def logits(self):
+        emb_W_list = self.choose_emb_W()
+        emb_B_list = self.choose_emb_B()
+        new_emb_W_list = []
+        new_emb_B_list = []
+        for emb_W in emb_W_list :
+            new_emb_W_list.append(emb_W * self.W_user_id)
+        for emb_B in emb_B_list :
+            new_emb_B_list.append(emb_B * self.B_user_id)
+              
+        logits = self.calc_fm(new_emb_W_list, new_emb_B_list)
+        return logits
+        
     def loss_BPR(self, T_logit, F_logit):
         T_exp = tf.expand_dims(T_logit, 1) # (# of T, 1)
         F_exp = tf.expand_dims(F_logit, 0) # (1, # of F)
@@ -204,8 +226,16 @@ class CONTEXT_FM:
         return loss
 
     @lazy_property
+    def optimize_user(self):
+        var_list = [self.W_user_id, self.B_user_id]
+        return tf.train.GradientDescentOptimizer(learning_rate=0.01).minimize(self.loss, var_list = var_list)
+
+    @lazy_property
     def optimize(self):
-        return tf.train.AdagradOptimizer(learning_rate=self.lr).minimize(self.loss)
+        var_list = tf.trainable_variables()
+        del var_list[var_list.index(self.W_user_id)]
+        del var_list[var_list.index(self.B_user_id)]
+        return tf.train.AdagradOptimizer(learning_rate=self.lr).minimize(self.loss, var_list = var_list)
         #return  self.optimizer.minimize(self.loss) 
     '''
 #    @lazy_property

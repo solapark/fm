@@ -21,11 +21,11 @@ W_item_id_path = '/data1/sap/ml/final/data/WB/W_item_id_350000.npy'
 B_item_id_path = '/data1/sap/ml/final/data/WB/B_item_id_350000.npy'
 '''
 
-os.environ["CUDA_VISIBLE_DEVICES"]='0, 1'
+os.environ["CUDA_VISIBLE_DEVICES"]='0,1'
 epoch = 100
 num_steps = epoch*data_size.TRAIN_SESSION.value
 batch_size =1
-w_dim =10 
+w_dim =50 
 #lr = 0.01 
 lr = 1 
 #loss_type = 'BPR'
@@ -78,8 +78,8 @@ with tf.Session() as session:
                 }
 
         #_, cur_loss = session.run([fm.assign_var, fm.loss], feed_dict=feed_dict_train)
-        #_, cur_loss = session.run([fm.assign_var, fm.temp_loss], feed_dict=feed_dict_train)
-        cur_loss = session.run(fm.temp_loss, feed_dict=feed_dict_train)
+        _, cur_loss = session.run([fm.assign_var, fm.temp_loss], feed_dict=feed_dict_train)
+        #cur_loss = session.run(fm.temp_loss, feed_dict=feed_dict_train)
         if np.isnan(float(cur_loss[-1])) or  np.isinf(float(cur_loss[-1])):
             print('step', step)
             print('price', price)
@@ -135,8 +135,7 @@ with tf.Session() as session:
                 }
 
                 #cur_recip_rank = session.run(fm.reciprocal_rank, feed_dict=feed_dict_test)
-                #_, cur_recip_rank = session.run([fm.assign_var, fm.reciprocal_rank], feed_dict=feed_dict_test)
-                cur_recip_rank = session.run(fm.reciprocal_rank, feed_dict=feed_dict_test)
+                _, cur_recip_rank = session.run([fm.assign_var, fm.reciprocal_rank], feed_dict=feed_dict_test)
                 recip_rank += cur_recip_rank
                 recip_cnt += 1
             print("@@@@@@@@@@@@@@@ iter %d mrr: %f" %(step, recip_rank/recip_cnt))
@@ -146,7 +145,18 @@ with tf.Session() as session:
             w_b_manager.save(new_user_W, new_user_B, new_item_W, new_item_B, step)
             #save_loss_mrr()
         
-        session.run(fm.optimize, feed_dict=feed_dict_train)
+        #if(step <20000 ) : 
+        if(int( step /5000) % 2 == 0) : 
+            #print('fm.optimize')
+            session.run(fm.optimize, feed_dict=feed_dict_train)
+        else : 
+            #print('fm.optimize_user')
+            session.run(fm.optimize_user, feed_dict=feed_dict_train)
+        #session.run(fm.optimize, feed_dict=feed_dict_train)
         new_user_W, new_user_B, new_item_W, new_item_B = session.run([fm.get_W_B_user_id_item_id()])[0]
-        #print('train new_user_B', new_user_B)
+        '''
+        print('old_user_W', W_user_id)
+        print('new_user_W', new_user_W)
+        print('new_user_B', new_user_B)
+        '''
         train_loader.update_WB(new_user_W, new_user_B, new_item_W, new_item_B)
