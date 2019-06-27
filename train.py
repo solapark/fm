@@ -25,11 +25,12 @@ os.environ["CUDA_VISIBLE_DEVICES"]='0, 1'
 epoch = 100
 num_steps = epoch*data_size.TRAIN_SESSION.value
 batch_size =1
-w_dim =10 
-#lr = 0.01 
-lr = 1 
+w_dim =20 
+#lr = 0.001 
+lr = 1.0
 #loss_type = 'BPR'
 loss_type = 'TOP1'
+#loss_type = 'CROSS_ENTROPY'
 
 w_b_manager = W_B_MANAGER(W_user_id_path, B_user_id_path, W_item_id_path, B_item_id_path)
 W_B = w_b_manager.new(w_dim)
@@ -49,11 +50,13 @@ with tf.Session() as session:
     #saver.restore(session, tf.train.latest_checkpoint(model_path))
 
     for step in range(num_steps):
-        filter_idx, platform_idx, device_idx, W_user_id, B_user_id, price, dp_order, interaction, W_item_id, B_item_id, item_property_binary, y, _, _, _, _ = train_loader.get_batch()
+        filter_idx, platform_idx, country_idx, device_idx, click_list, W_user_id, B_user_id, price, dp_order, interaction, W_item_id, B_item_id, item_property_binary, y, _, _, click_idx, _ = train_loader.get_batch()
+        #print(country_idx)
         #dp_order = dp_order/24
         price_mean = np.mean(price)
         price_std = max(np.std(price), 1)
         price =  - ( (price - price_mean) / price_std )
+        #price =  - price
         '''
         if len(price) < 25 : 
             #price = np.append(price, np.array( [max(price)] * (25-len(price) ))) 
@@ -64,8 +67,16 @@ with tf.Session() as session:
         interaction = interaction > 0
         item_property_binary = item_property_binary / np.clip(np.sum(item_property_binary), 1, 10000)
         filter_idx = filter_idx / np.clip(np.sum(filter_idx), 1, 10000)
+        #y = np.array([0] * len(y))
+        #y[click_idx] = 1
+        '''
+        print('.')
+        print(click_list)
+        print(y)
+        '''
         feed_dict_train = {fm.filter_idx : filter_idx, \
                     fm.platform_idx : platform_idx,\
+                    fm.country_idx : country_idx,\
                     fm.device_idx : device_idx,\
                     fm.interaction : interaction,\
                     fm.price : price,\
@@ -75,21 +86,35 @@ with tf.Session() as session:
                     fm.B_user_id_ph : B_user_id,\
                     fm.B_item_id_ph : B_item_id,\
                     fm.item_property_binary : item_property_binary,\
+                    fm.click : click_list,\
                     fm.y : y\
                 }
 
         #_, cur_loss = session.run([fm.assign_var, fm.loss], feed_dict=feed_dict_train)
-        #_, cur_loss = session.run([fm.assign_var, fm.temp_loss], feed_dict=feed_dict_train)
-        cur_loss = session.run(fm.temp_loss, feed_dict=feed_dict_train)
+        middle_cal, cur_loss = session.run([fm.assign_var, fm.temp_loss], feed_dict=feed_dict_train)
+        #print(session.run(fm.logits, feed_dict=feed_dict_train))
+        #cur_loss = session.run(fm.temp_loss, feed_dict=feed_dict_train)
+        '''
         if np.isnan(float(cur_loss[-1])) or  np.isinf(float(cur_loss[-1])):
             print('step', step)
             print('price', price)
             print(session.run(fm.logits, feed_dict = feed_dict_train))
             #print(cur_loss)
+        '''
         loss = loss + cur_loss[-1] 
+        #loss = loss + cur_loss 
         loss_cnt +=1
 
         if (step % 1000 == 0):
+            '''
+            print('T_exp\n', cur_loss[0])
+            print('F_exp\n', cur_loss[1])
+            print('TFsub\n', cur_loss[2])
+            #print('sig_TFsub\n', cur_loss[3])
+            #print('log\n', cur_loss[4])
+            print('TFsub_reg\n', cur_loss[3])
+            print('loss\n', cur_loss[-1])
+            '''
             print("@ iter %d loss : %f" %(step, loss/loss_cnt))
             loss = 0
             loss_cnt = 0
@@ -100,12 +125,13 @@ with tf.Session() as session:
             recip_rank = 0
             recip_cnt = 0
             for i in range(val_loader.impression_dic_size):
-                filter_idx, platform_idx, device_idx, W_user_id, B_user_id, price, dp_order, interaction, W_item_id, B_item_id, item_property_binary, _, _, _, click_idx, _ = val_loader.get_batch()
+                filter_idx, platform_idx, country_idx, device_idx, click_list, W_user_id, B_user_id, price, dp_order, interaction, W_item_id, B_item_id, item_property_binary, y, _, _, click_idx, _ = val_loader.get_batch()
 
                 #dp_order = dp_order/24
                 price_mean = np.mean(price)
                 price_std = max(np.std(price), 1)
                 price =  - ( (price - price_mean) / price_std )
+                #price = - price
                 '''
                 if len(price) < 25 : 
                     #price = np.append(price, np.array( [max(price)] * (25-len(price) ))) 
@@ -123,6 +149,7 @@ with tf.Session() as session:
                     continue
                 feed_dict_test = {fm.filter_idx : filter_idx, \
                     fm.platform_idx : platform_idx,\
+                    fm.country_idx : country_idx,\
                     fm.device_idx : device_idx,\
                     fm.interaction : interaction,\
                     fm.price : price,\
@@ -132,6 +159,7 @@ with tf.Session() as session:
                     fm.B_user_id_ph : B_user_id,\
                     fm.B_item_id_ph : B_item_id,\
                     fm.item_property_binary : item_property_binary,\
+                    fm.click : click_list, \
                     fm.click_idx : click_idx\
                 }
 

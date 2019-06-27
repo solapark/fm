@@ -34,6 +34,7 @@ class feature_size(enum.Enum):
     INTERACTION = 4 
     DEVICE = 3
     PLATFORM = 55
+    COUNTRY = 214 
 
     ITEM_PROPERTIES = 157
     PRICE = 1
@@ -90,6 +91,7 @@ filter_list_path = '/data1/sap/ml/final/data/pkl/feature_list/filter_list.pkl'
 user_id_list_path = '/data1/sap/ml/final/data/pkl/feature_list/user_id_list.pkl'
 session_id_list_path = '/data1/sap/ml/final/data/pkl/feature_list/session_id_list.pkl'
 item_id_list_path = '/data1/sap/ml/final/data/pkl/feature_list/item_id_list.pkl'
+country_list_path = '/data1/sap/ml/final/data/pkl/feature_list/country_list.pkl'
 
 W_user_id_path = '/data1/sap/ml/final/data/pkl/W_user_id.np'
 B_user_id_path = '/data1/sap/ml/final/data/pkl/B_user_id.np'

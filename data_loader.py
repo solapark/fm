@@ -28,7 +28,9 @@ class DATA_LOADER:
         self.cur_click_idx = 0
         self.cur_filter_idx = 0
         self.cur_platform_idx = 0
+        self.cur_country_idx = 0
         self.cur_device = 0
+        self.cur_click_list = 0
         self.cur_user_id = 0
         self.cur_W_user_id = 0
         self.cur_B_user_id = 0
@@ -63,6 +65,7 @@ class DATA_LOADER:
         self.cur_filter_idx = self.cur_dic['filter_idx']
         #e = time.time()
         self.cur_platform_idx = self.cur_dic['platform_idx']
+        self.cur_country_idx = self.cur_dic['country_idx']
         #f = time.time()
         self.cur_device_idx = self.cur_dic['device_idx']
         #g = time.time()
@@ -85,6 +88,8 @@ class DATA_LOADER:
         #p = time.time()
         self.cur_num_item = len(self.cur_item_id)
        #q = time.time()
+        self.cur_click_list = np.zeros(self.cur_num_item, dtype= int)
+        self.cur_click_list[self.cur_dic["click_list"]] = 1
         '''
         if(self.cur_num_item != 25) :
             print(self.cur_num_item)
@@ -115,7 +120,7 @@ class DATA_LOADER:
                 self.shuffle_batch()
             self.last_batch_idx = 0
 
-        return self.cur_filter_idx, self.cur_platform_idx, self.cur_device_idx, self.cur_W_user_id, self.cur_B_user_id, self.cur_price, self.cur_dp_order, self.cur_interaction, self.cur_W_item_id, self.cur_B_item_id, self.cur_item_property_binary, self.cur_y, self.cur_user_id, self.cur_item_id, self.cur_click_idx, self.impressions
+        return self.cur_filter_idx, self.cur_platform_idx, self.cur_country_idx, self.cur_device_idx, self.cur_click_list, self.cur_W_user_id, self.cur_B_user_id, self.cur_price, self.cur_dp_order, self.cur_interaction, self.cur_W_item_id, self.cur_B_item_id, self.cur_item_property_binary, self.cur_y, self.cur_user_id, self.cur_item_id, self.cur_click_idx, self.impressions
         
     def update_WB(self, new_user_W, new_user_B, new_item_W, new_item_B) :
         self.W_user_id[self.cur_user_id] = new_user_W

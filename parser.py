@@ -32,7 +32,7 @@ def make_item_id_list(csv_file, header_name):
             print(i+1, 'DONE') 
     f.close()
 
-    pickle_name = '/hdd/sap/ml/final/data/' + header_name + '.pkl'
+    pickle_name = '/data1/sap/ml/final/data/' + header_name + '.pkl'
     save_pickle(pickle_name, target_list)
 
 def get_feature_set(csv_file_name, header_name, action_type_token):
@@ -54,6 +54,11 @@ def get_feature_set(csv_file_name, header_name, action_type_token):
             target_tokens = target.split('|')
             for target_token in target_tokens :
                 target_set.add(target_token)
+            '''
+            target_tokens = target.split(', ')[-1]
+            #print(target_tokens)
+            target_set.add(target_tokens)
+            '''
     
         if(i % 100000 == 0) :
             print(i+1, 'DONE') 
@@ -359,9 +364,96 @@ def get_csv_size(path) :
 
     return lines_size
      
-def add_impression_to_dic(csv_path, dic_path) :
+def add_click_list_to_dic(csv_path, dic_path, session_id_list_path) :
     #lines_size = get_csv_size(csv_path)
-    lines_size = 3782335
+    lines_size = 15932992
+    f = open(csv_path, 'r')
+    lines = csv.reader(f)
+    header = next(lines, None)
+    print('lines_size', lines_size)
+    dic = load_pickle(dic_path)
+    session_id_list = load_pickle(session_id_list_path)
+
+    complete_cnt = 0
+    session_id, step, action_type, reference, impressions = [], [], [], [], []
+    for i, line in enumerate(lines) : 
+        session_id.append(line[header_idx.SESSION_ID.value])
+        step.append(line[header_idx.STEP.value])
+        action_type.append(line[header_idx.ACTION_TYPE.value])
+        reference.append(line[header_idx.REFERENCE.value])
+        impressions.append(line[header_idx.IMPRESSIONS.value])
+
+        if(i == 0) : continue
+        if (step[-1] =='1') or (i == lines_size-1) :
+            last_idx = -1 if step[-1] == '1' else None
+            cur_session_id = session_id[-2]
+            if(action_type[-2] != 'clickout item' or session_id_list[dic[complete_cnt]["session_id_idx"]] != cur_session_id):
+                del session_id[:last_idx], action_type[:last_idx], step[:last_idx], reference[:last_idx], impressions[:last_idx]
+                continue
+
+            cur_impressions = impressions[-2].split('|')
+            click_list = get_click_out_item_list(action_type[:last_idx], reference[:last_idx])
+            #click_list = list(set(click_list[:-1]))
+            click_list = list(set(click_list))
+            click_list = [cur_impressions.index(click_item) for click_item in click_list if click_item in cur_impressions] 
+            dic[complete_cnt]["click_list"] = click_list
+            #print(cur_session_id, dic[complete_cnt]["click_list"])
+            complete_cnt += 1
+            if(complete_cnt % 10000 == 0) :
+                print(complete_cnt, '/', len(dic), 'Done')
+            
+            del session_id[:last_idx], action_type[:last_idx], step[:last_idx], reference[:last_idx], impressions[:last_idx]
+            if(complete_cnt ==  len(dic)) : break
+
+    save_pickle(dic_path, dic) 
+
+
+def add_city_to_dic(csv_path, dic_path, session_id_list_path, city_list_path) :
+    lines_size = get_csv_size(csv_path)
+    #lines_size = 15932992
+    f = open(csv_path, 'r')
+    lines = csv.reader(f)
+    header = next(lines, None)
+    print('lines_size', lines_size)
+    dic = load_pickle(dic_path)
+    session_id_list = load_pickle(session_id_list_path)
+    country_list = load_pickle(country_list_path)
+
+    complete_cnt = 0
+    session_id, step, action_type, city = [], [], [], []
+    for i, line in enumerate(lines) : 
+        session_id.append(line[header_idx.SESSION_ID.value])
+        step.append(line[header_idx.STEP.value])
+        action_type.append(line[header_idx.ACTION_TYPE.value])
+        city.append(line[header_idx.CITY.value])
+        
+        if(i == 0) : continue
+        if (step[-1] =='1') or (i == lines_size-1) :
+            last_idx = -1 if step[-1] == '1' else None
+            if(action_type[-2] != 'clickout item'):
+                del session_id[:last_idx], action_type[:last_idx], step[:last_idx], city[:last_idx]
+                continue
+
+            cur_session_id = session_id[-2]
+            cur_city = city[-2]
+            if(session_id_list[dic[complete_cnt]["session_id_idx"]] != cur_session_id):
+                del session_id[:last_idx], action_type[:last_idx], step[:last_idx], city[:last_idx]
+                continue
+            dic[complete_cnt]["country_idx"] = get_index(country_list, cur_city.split(', ')[-1])
+            #print(cur_session_id, dic[complete_cnt]["country_idx"], cur_city.split(', ')[-1])
+            complete_cnt += 1
+            if(complete_cnt % 10000 == 0) :
+                print(complete_cnt, '/', len(dic), 'Done')
+            
+            del session_id[:last_idx], action_type[:last_idx], step[:last_idx], city[:last_idx]
+            if(complete_cnt ==  len(dic)) : break
+
+    save_pickle(dic_path, dic) 
+
+
+def add_impression_to_dic(csv_path, dic_path) :
+    lines_size = get_csv_size(csv_path)
+    #lines_size = 3782335
     f = open(csv_path, 'r')
     lines = csv.reader(f)
     header = next(lines, None)
@@ -692,50 +784,52 @@ def decode_dic(dic, enc_path, data_name, platform_list_path, device_list_path, f
 
 if __name__ == "__main__" :
     np.random.seed(0)
-    item_metadata_csv_path = '/home/sapark/class/ml/final/data/item_metadata.csv'
-    train_csv_path = '/home/sapark/class/ml/final/data/train.csv'
-    test_csv_path = '/home/sapark/class/ml/final/data/test.csv'
+    item_metadata_csv_path = '/home/sap/class/ml/final/data/item_metadata.csv'
+    train_csv_path = '/home/sap/class/ml/final/data/train.csv'
+    test_csv_path = '/home/sap/class/ml/final/data/test.csv'
 
-    property_list_path ='/hdd/sap/ml/final/data/pkl/feature_list/property_list.pkl' 
-    platform_list_path = '/hdd/sap/ml/final/data/pkl/feature_list/platform_list.pkl'
-    device_list_path = '/hdd/sap/ml/final/data/pkl/feature_list/device_list.pkl'
-    filter_list_path = '/hdd/sap/ml/final/data/pkl/feature_list/filter_list.pkl'
-    poi_list_path ='/hdd/sap/ml/final/data/pkl/feature_list/poi_list.pkl' 
-    destination_list_path = '/hdd/sap/ml/final/data/pkl/feature_list/destination_list.pkl'
-    user_id_list_path = '/hdd/sap/ml/final/data/pkl/feature_list/user_id_list.pkl'
-    city_list_path = '/hdd/sap/ml/final/data/pkl/feature_list/city_list.pkl'
+    property_list_path ='/data1/sap/ml/final/data/pkl/feature_list/property_list.pkl' 
+    platform_list_path = '/data1/sap/ml/final/data/pkl/feature_list/platform_list.pkl'
+    device_list_path = '/data1/sap/ml/final/data/pkl/feature_list/device_list.pkl'
+    filter_list_path = '/data1/sap/ml/final/data/pkl/feature_list/filter_list.pkl'
+    poi_list_path ='/data1/sap/ml/final/data/pkl/feature_list/poi_list.pkl' 
+    destination_list_path = '/data1/sap/ml/final/data/pkl/feature_list/destination_list.pkl'
+    user_id_list_path = '/data1/sap/ml/final/data/pkl/feature_list/user_id_list.pkl'
+    city_list_path = '/data1/sap/ml/final/data/pkl/feature_list/city_list.pkl'
 
-    item_id_list_path = '/hdd/sap/ml/final/data/pkl/feature_list/item_id_list.pkl'
-    item_property_encoding_path = '/hdd/sap/ml/final/data/pkl/feature_list/item_proprerty_encoding.hdf5'
+    item_id_list_path = '/data1/sap/ml/final/data/pkl/feature_list/item_id_list.pkl'
+    item_property_encoding_path = '/data1/sap/ml/final/data/pkl/feature_list/item_proprerty_encoding.hdf5'
 
-    train_val_encoding_path = '/home/sapark/class/ml/final/data/pkl/train_val_encoding.hdf5'
-    train_dic_path = '/hdd/sap/ml/final/data/pkl/train_dic.pkl'
-    val_dic_path = '/hdd/sap/ml/final/data/pkl/val_dic.pkl'
-    skip_item_path = '/hdd/sap/ml/final/data/pkl/skip_item.pkl'
-    skip_session_path = '/hdd/sap/ml/final/data/pkl/skip_session.pkl'
-    click_not_in_impression_path = '/hdd/sap/ml/final/data/pkl/click_not_in_impression.pkl'
+    train_val_encoding_path = '/home/sap/class/ml/final/data/pkl/train_val_encoding.hdf5'
+    train_dic_path = '/data1/sap/ml/final/data/pkl/train_dic.pkl'
+    val_dic_path = '/data1/sap/ml/final/data/pkl/val_dic.pkl'
+    skip_item_path = '/data1/sap/ml/final/data/pkl/skip_item.pkl'
+    skip_session_path = '/data1/sap/ml/final/data/pkl/skip_session.pkl'
+    click_not_in_impression_path = '/data1/sap/ml/final/data/pkl/click_not_in_impression.pkl'
 
-    test_encoding_path = '/home/sapark/class/ml/final/data/pkl/test_encoding.hdf5'
-    test_dic_path = '/hdd/sap/ml/final/data/pkl/test_dic.pkl'
-    dummy_path = '/hdd/sap/ml/final/data/pkl/dummy.pkl'
+    test_encoding_path = '/home/sap/class/ml/final/data/pkl/test_encoding.hdf5'
+    test_dic_path = '/data1/sap/ml/final/data/pkl/test_dic.pkl'
+    dummy_path = '/data1/sap/ml/final/data/pkl/dummy.pkl'
 
     #1. extract feature list
-    device_list_path = '/hdd/sap/ml/final/data/pkl/feature_list/device_list.pkl'
-    filter_list_path = '/hdd/sap/ml/final/data/pkl/feature_list/filter_list.pkl'
-    poi_list_path ='/hdd/sap/ml/final/data/pkl/feature_list/poi_list.pkl' 
-    destination_list_path = '/hdd/sap/ml/final/data/pkl/feature_list/destination_list.pkl'
-    user_id_list_path = '/hdd/sap/ml/final/data/pkl/feature_list/user_id_list.pkl'
-    session_id_list_path = '/hdd/sap/ml/final/data/pkl/feature_list/session_id_list.pkl'
-    city_list_path = '/hdd/sap/ml/final/data/pkl/feature_list/city_list.pkl'
-    item_id_list_path = '/hdd/sap/ml/final/data/pkl/feature_list/item_id_list.pkl'
+    device_list_path = '/data1/sap/ml/final/data/pkl/feature_list/device_list.pkl'
+    filter_list_path = '/data1/sap/ml/final/data/pkl/feature_list/filter_list.pkl'
+    poi_list_path ='/data1/sap/ml/final/data/pkl/feature_list/poi_list.pkl' 
+    destination_list_path = '/data1/sap/ml/final/data/pkl/feature_list/destination_list.pkl'
+    user_id_list_path = '/data1/sap/ml/final/data/pkl/feature_list/user_id_list.pkl'
+    session_id_list_path = '/data1/sap/ml/final/data/pkl/feature_list/session_id_list.pkl'
+    city_list_path = '/data1/sap/ml/final/data/pkl/feature_list/city_list.pkl'
+    country_list_path = '/data1/sap/ml/final/data/pkl/feature_list/country_list.pkl'
+    item_id_list_path = '/data1/sap/ml/final/data/pkl/feature_list/item_id_list.pkl'
 
     '''
-    header_name_list = ['device', 'current_filters', 'user_id', 'session_id', 'item_id']
-    action_type_list = [None, 'None', None, None, None]
-    is_item_metadata_list = [False, False, False, False, True]
-    save_path_list = [device_list_path, filter_list_path, user_id_list_path, session_id_list_path, item_id_list_path]
+    header_name_list = ['city']
+    action_type_list = ['clickout item']
+    is_item_metadata_list = [False]
+    save_path_list = [country_list_path]
     for header_name, action_type, is_item_metadata, save_path in zip(header_name_list, action_type_list, is_item_metadata_list, save_path_list) :
         make_feature_list(train_csv_path, test_csv_path, item_metadata_csv_path, header_name, save_path, is_item_metadata, action_type)
+    country_list = load_pickle(country_list_path)
     '''
 
     #2. parse_meta_item csv
@@ -744,7 +838,7 @@ if __name__ == "__main__" :
     #item_property = load_pickle(item_property_encoding_path)
 
     #3. parse_train_csv
-    parse_csv(train_csv_path, item_id_list_path, session_id_list_path, user_id_list_path, filter_list_path, platform_list_path, device_list_path, train_val_encoding_path, train_dic_path, val_dic_path, skip_item_path, skip_session_path, click_not_in_impression_path, is_test = 0)
+    #parse_csv(train_csv_path, item_id_list_path, session_id_list_path, user_id_list_path, filter_list_path, platform_list_path, device_list_path, train_val_encoding_path, train_dic_path, val_dic_path, skip_item_path, skip_session_path, click_not_in_impression_path, is_test = 0)
     '''
     train_dic = load_pickle(train_dic_path)
     session_dic, impression_dics = decode_dic(train_dic[100], train_val_encoding_path, 'train_enc', device_list_path, filter_list_path, user_id_list_path, session_id_list_path, item_id_list_path)
@@ -753,8 +847,14 @@ if __name__ == "__main__" :
         print(impression_dic) 
     '''
     #4. parse_test_csv
-    parse_csv(test_csv_path, item_id_list_path, session_id_list_path, user_id_list_path, filter_list_path, platform_list_path, device_list_path, test_encoding_path, test_dic_path, dummy_path, dummy_path, dummy_path, dummy_path, is_test = 1)
+    #parse_csv(test_csv_path, item_id_list_path, session_id_list_path, user_id_list_path, filter_list_path, platform_list_path, device_list_path, test_encoding_path, test_dic_path, dummy_path, dummy_path, dummy_path, dummy_path, is_test = 1)
     #parse_csv(test_csv_path, item_id_list_path, item_property_encoding_path, test_encoding_path, test_dic_path, dummy_path, dummy_path, dummy_path, dummy_path, is_test = 1)
     #add_impression_to_dic(test_csv_path, test_dic_path)
+    #add_city_to_dic(test_csv_path, test_dic_path, session_id_list_path, city_list_path)
+    #add_city_to_dic(train_csv_path, train_dic_path, session_id_list_path, city_list_path)
+    #add_city_to_dic(train_csv_path, val_dic_path, session_id_list_path, city_list_path)
+    #add_click_list_to_dic(train_csv_path, train_dic_path, session_id_list_path)
+    #add_click_list_to_dic(train_csv_path, val_dic_path, session_id_list_path)
+    add_click_list_to_dic(test_csv_path, test_dic_path, session_id_list_path)
     #dic = load_pickle(test_dic_path)
     print('aaa')
