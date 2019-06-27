@@ -67,6 +67,8 @@ class CONTEXT_FM:
             self.B_item_id = tf.Variable(tf.constant(0.0, shape = [self.item_size, ]), name = 'item_id') 
             self.B_global = tf.Variable(tf.truncated_normal(shape = ()), name = 'global') 
 
+        self.define_emb_W()
+        self.define_emb_B()
         self.logits
         self.loss
         self.temp_loss
@@ -84,63 +86,61 @@ class CONTEXT_FM:
         ass_B_item = tf.assign(self.B_item_id, self.B_item_id_ph)
         return ass_W_user, ass_B_user, ass_W_item, ass_B_item
         
+    def define_emb_W(self) :
+        num_item = tf.shape(self.interaction)[0]
+        with tf.name_scope('emb_W') as scope : 
+            self.filter_emb_W = tf.reduce_sum(tf.nn.embedding_lookup(self.W_filter, self.filter_idx), 0) #(w_dim, )
+            self.platform_emb_W = tf.nn.embedding_lookup(self.W_platform, self.platform_idx) #(w_dim, )
+            self.device_emb_W = tf.nn.embedding_lookup(self.W_device, self.device_idx) #(w_dim, )
+            self.interaction_emb_W = tf.matmul(self.interaction, self.W_interaction) #(None, 4) * (4, w_dim) = (None, w_dim)
+            #price_emb_W = tf.expand_dims(self.price, 1) * tf.expand_dims(self.W_price, 0) #(None, w_dim)
+            price_exp_W = tf.expand_dims(tf.expand_dims(self.price, 0), 2) #(1, None, 1)
+            price_conv = tf.layers.conv1d(price_exp_W, self.W_dim, 5, padding = 'same', activation=tf.nn.relu) # (1, none, w_dim)
+            price_fc = tf.contrib.layers.fully_connected(price_conv, self.W_dim) # (1, none, w_dim) 
+            self.price_emb_W = tf.reshape(price_fc, [-1, self.W_dim])[:num_item] # (none, w_dim) 
+            self.order_emb_W = tf.nn.embedding_lookup(self.W_order, self.order) #(None, w_dim)
+            self.item_property_emb_W = tf.matmul(self.item_property_binary, self.W_item_property) #(None, w_dim)
+
+    def define_emb_B(self) :
+        with tf.name_scope('emb_B') as scope : 
+            self.filter_emb_B = tf.reduce_sum(tf.nn.embedding_lookup(self.B_filter, self.filter_idx)) # [1,]
+            self.platform_emb_B = tf.nn.embedding_lookup(self.B_platform, self.platform_idx) #[1,]
+            self.device_emb_B = tf.nn.embedding_lookup(self.B_device, self.device_idx) #(1, )
+            self.interaction_emb_B = tf.reduce_sum( tf.matmul(self.interaction, tf.expand_dims(self.B_interaction, 1)), 1) #(None, 4) * (4, 1) = (None, 1) -> (None, )
+            self.price_emb_B = self.price * self.B_price #(None, )
+            self.order_emb_B = tf.nn.embedding_lookup(self.B_order, self.order) #(None, )
+            self.item_property_emb_B = tf.reduce_sum(tf.matmul(self.item_property_binary, tf.expand_dims(self.B_item_property, 1)), 1) #(None, 157) * (157, 1) = (None, 1) -> (None, )
+
+    def choose_emb_W(self):
+        num_item = tf.shape(self.interaction)[0]
+        return [self.platform_emb_W, self.device_emb_W, self.interaction_emb_W, self.price_emb_W, self.item_property_emb_W, self.W_item_id[:num_item]] 
+
+    def choose_emb_B(self):
+        num_item = tf.shape(self.interaction)[0]
+        return [self.B_global, self.platform_emb_B,  self.device_emb_B,  self.interaction_emb_B, self.price_emb_B,  self.item_property_emb_B, self.B_item_id[:num_item]]
 
     @lazy_property
     def logits(self):
         num_item = tf.shape(self.interaction)[0]
-        with tf.name_scope('emb_W') as scope : 
-            filter_emb_W = tf.reduce_sum(tf.nn.embedding_lookup(self.W_filter, self.filter_idx), 0) #(w_dim, )
-            platform_emb_W = tf.nn.embedding_lookup(self.W_platform, self.platform_idx) #(w_dim, )
-            device_emb_W = tf.nn.embedding_lookup(self.W_device, self.device_idx) #(w_dim, )
-            interaction_emb_W = tf.matmul(self.interaction, self.W_interaction) #(None, 4) * (4, w_dim) = (None, w_dim)
-
-            #price_emb_W = tf.expand_dims(self.price, 1) * tf.expand_dims(self.W_price, 0) #(None, w_dim)
-            price_exp_W = tf.expand_dims(tf.expand_dims(self.price, 0), 2) #(1, None, 1)
-            print('price_exp_W', price_exp_W)
-            price_conv_W = tf.layers.conv1d(price_exp_W, self.W_dim, 5, padding = 'same', activation=tf.nn.relu) # (1, none, w_dim)
-            price_emb_W = tf.contrib.layers.fully_connected(price_conv_W, self.W_dim) # (1, none, w_dim) 
-            price_emb_W = tf.reshape(price_emb_W, [-1, self.W_dim])[:num_item] # (none, w_dim) 
-            '''
-            price_reshape = tf.reshape(self.price, [1, 25])
-            print(price_reshape)
-            price_fc = tf.contrib.layers.fully_connected(price_reshape, 25) # (1, 25) 
-            print(price_fc)
-            price_conv_W = tf.layers.conv1d(tf.expand_dims(price_fc, 2),  self.W_dim, 5, padding = 'same') # (1, 25, 10)            
-            print('price_conv_W', price_conv_W)
-            price_emb_W = price_conv_W[0, :num_item] # (none, 10)            
-            print('price_emb_W', price_emb_W)
-            '''
-            '''
-            price_conv_W = tf.layers.conv1d(tf.expand_dims(price_emb_W, 2),  10, 5, padding = 'same') # (1, 25, 10)
-            print(price_conv_W)
-            price_emb_W = tf.contrib.layers.fully_connected(price_conv_W, 1)[0, :num_item, 0] # (none, ) 
-            print(price_emb_W)
-            '''
-
-            order_emb_W = tf.nn.embedding_lookup(self.W_order, self.order) #(None, w_dim)
-            print('order_emb_W', order_emb_W)
-            item_property_emb_W = tf.matmul(self.item_property_binary, self.W_item_property) #(None, w_dim)
- 
-        with tf.name_scope('emb_B') as scope : 
-            filter_emb_B = tf.reduce_sum(tf.nn.embedding_lookup(self.B_filter, self.filter_idx)) # [1,]
-            platform_emb_B = tf.nn.embedding_lookup(self.B_platform, self.platform_idx) #[1,]
-            device_emb_B = tf.nn.embedding_lookup(self.B_device, self.device_idx) #(1, )
-            interaction_emb_B = tf.reduce_sum( tf.matmul(self.interaction, tf.expand_dims(self.B_interaction, 1)), 1) #(None, 4) * (4, 1) = (None, 1) -> (None, )
-            price_emb_B = self.price * self.B_price #(None, )
-            #order_emb_B = self.order * self.B_order #(None, )
-            order_emb_B = tf.nn.embedding_lookup(self.B_order, self.order) #(None, )
-            item_property_emb_B = tf.reduce_sum(tf.matmul(self.item_property_binary, tf.expand_dims(self.B_item_property, 1)), 1) #(None, 157) * (157, 1) = (None, 1) -> (None, )
-
         with tf.name_scope('first_term') as scope : 
-            emb_W_sum = platform_emb_W +device_emb_W  +interaction_emb_W +price_emb_W +item_property_emb_W +self.W_item_id[:num_item] #+filter_emb_W +order_emb_W +self.W_user_id#(None, w_dim)
+            emb_W_list = self.choose_emb_W()
+            emb_W_sum = tf.constant(0.0, shape = [self.W_dim, ])  
+            for emb_W in emb_W_list : emb_W_sum += emb_W
             emb_W_sum_square_sum = tf.reduce_sum( tf.square(emb_W_sum) , axis = 1)  #(None, )
 
         with tf.name_scope('second_term') as scope : 
-            emb_W_sum_square = tf.reduce_sum(tf.square(platform_emb_W)) +tf.reduce_sum(tf.square(device_emb_W)) +tf.reduce_sum(tf.square(interaction_emb_W), axis = 1) +tf.reduce_sum(tf.square(price_emb_W), axis = 1) +tf.reduce_sum(tf.square(item_property_emb_W), axis = 1) +tf.reduce_sum(tf.square(self.W_item_id[:num_item]), axis = 1)# tf.reduce_sum(tf.square(filter_emb_W)) ++tf.reduce_sum(tf.square(order_emb_W), axis = 1)+tf.reduce_sum(tf.square(self.W_user_id)) #(None,)
+            emb_W_list = self.choose_emb_W()
+            emb_W_sum_square = tf.constant(0.0, shape = ())  
+            for emb_W in emb_W_list : emb_W_sum_square += tf.reduce_sum(tf.square(emb_W), axis = -1)
+
         with tf.name_scope('emb_B_sum') as scope : 
-            emb_B = self.B_global +platform_emb_B + device_emb_B + interaction_emb_B + price_emb_B + item_property_emb_B  + self.B_item_id[:num_item] #+ filter_emb_B + order_emb_B + self.B_user_id# (None, )
+            emb_B_list = self.choose_emb_B()
+            emb_B_sum = tf.constant(0.0, shape = [self.W_dim, ])  
+            for emb_B in emb_B_list : emb_B_sum += emb_B
+
         with tf.name_scope('logit') as scope : 
             logit = emb_W_sum_square_sum - emb_W_sum_square + emb_B
+
         return logit
 
     def loss_BPR(self, T_logit, F_logit):
@@ -251,7 +251,6 @@ class CONTEXT_FM:
     def get_vars(self) :
         #return [{'name':n.name, 'value':n. for n in tf.get_default_graph().as_graph_def().node]
         return tf.trainable_variables()
-        
 
 if __name__ == "__main__" :
     os.environ["CUDA_VISIBLE_DEVICES"]='1' 

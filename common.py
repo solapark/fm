@@ -73,6 +73,24 @@ class encoding_idx(enum.Enum) :
     Y = slice(7, 8)
     '''
 
+class emb_W_pick(enum.Enum):
+    FILTER = 0
+    PLATFORM = 1
+    DEVICE = 2
+    INTERACTION = 3
+    PRICE = 4
+    ITEM_PROPERTY = 5
+    ITEM = 6
+
+class emb_B_pick(enum.Enum):
+    FILTER = 0
+    PLATFORM = 1
+    DEVICE = 2
+    INTERACTION = 3
+    PRICE = 4
+    ITEM_PROPERTY = 5
+    ITEM = 6
+    
 impression_enc_path ='/home/sap/class/ml/final/data/pkl/train_val_encoding.hdf5' 
 impression_enc_train_name = 'train_enc'
 impression_enc_val_name = 'val_enc'

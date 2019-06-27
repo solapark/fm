@@ -47,7 +47,6 @@ with tf.Session() as session:
     session.run(tf.global_variables_initializer())
     #saver.restore(session, "/data1/sap/ml/final/model/model-350000")
     #saver.restore(session, tf.train.latest_checkpoint(model_path))
-
     for step in range(num_steps):
         filter_idx, platform_idx, device_idx, W_user_id, B_user_id, price, dp_order, interaction, W_item_id, B_item_id, item_property_binary, y, _, _, _, _ = train_loader.get_batch()
         #dp_order = dp_order/24
