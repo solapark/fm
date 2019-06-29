@@ -1,3 +1,4 @@
+from time import sleep
 import random
 import os
 import numpy as np
@@ -21,7 +22,7 @@ W_item_id_path = '/data1/sap/ml/final/data/WB/W_item_id_350000.npy'
 B_item_id_path = '/data1/sap/ml/final/data/WB/B_item_id_350000.npy'
 '''
 
-os.environ["CUDA_VISIBLE_DEVICES"]='0, 1'
+os.environ["CUDA_VISIBLE_DEVICES"]='-1'
 epoch = 100
 num_steps = epoch*data_size.TRAIN_SESSION.value
 batch_size =1
@@ -80,11 +81,21 @@ with tf.Session() as session:
         #_, cur_loss = session.run([fm.assign_var, fm.loss], feed_dict=feed_dict_train)
         #_, cur_loss = session.run([fm.assign_var, fm.temp_loss], feed_dict=feed_dict_train)
         cur_loss = session.run(fm.temp_loss, feed_dict=feed_dict_train)
-        if np.isnan(float(cur_loss[-1])) or  np.isinf(float(cur_loss[-1])):
+        '''
+        if np.isnan(float(cur_loss[-1])) or  np.isinf(float(cur_loss[-1]))or  step%1000 == 0:
             print('step', step)
             print('price', price)
-            print(session.run(fm.logits, feed_dict = feed_dict_train))
+            #print('F_price_gt_0', cur_loss[0])
+            print('T_exp', cur_loss[1])
+            print('F_exp', cur_loss[2])
+            print('TF_sub', cur_loss[3])
+            #print('TF_sub_reg', cur_loss[4])
+            print('logit', session.run(fm.logits, feed_dict = feed_dict_train))
             #print(cur_loss)
+
+            sleep(10)
+        '''
+
         loss = loss + cur_loss[-1] 
         loss_cnt +=1
 
@@ -117,6 +128,23 @@ with tf.Session() as session:
                 #interaction = interaction * 0
                 item_property_binary = item_property_binary / np.clip(np.sum(item_property_binary), 1, 10000)
                 filter_idx = filter_idx / np.clip(np.sum(filter_idx), 1, 10000)
+                interaction_idx = -1
+                interaction_inds = np.where(interaction > 0)
+                if(interaction_inds[0].any()) :
+                    interaction_idx = interaction_inds[0][-1]
+                    if(interaction_idx < 3) :
+                        interaction_idx = -1
+                    else :
+                        interaction_idx +=3
+
+
+                    
+                    '''
+                    if(interaction_idx < 12) :
+                        interaction_idx = -1
+                    else :
+                    '''
+                        
                 if(click_idx == -1):
                     #print('click not in impression')
                     continue
@@ -131,11 +159,17 @@ with tf.Session() as session:
                     fm.B_user_id_ph : B_user_id,\
                     fm.B_item_id_ph : B_item_id,\
                     fm.item_property_binary : item_property_binary,\
-                    fm.click_idx : click_idx\
+                    fm.click_idx : click_idx,\
+                    fm.interaction_idx : interaction_idx
                 }
 
                 #cur_recip_rank = session.run(fm.reciprocal_rank, feed_dict=feed_dict_test)
                 #_, cur_recip_rank = session.run([fm.assign_var, fm.reciprocal_rank], feed_dict=feed_dict_test)
+                #print('interaction', interaction)
+                #old_logit = session.run(fm.logits, feed_dict=feed_dict_test)
+                #new_logit = session.run(fm.new_logit(), feed_dict=feed_dict_test)
+                #print('old logit', old_logit)
+                #print('new_logit', new_logit)
                 cur_recip_rank = session.run(fm.reciprocal_rank, feed_dict=feed_dict_test)
                 recip_rank += cur_recip_rank
                 recip_cnt += 1

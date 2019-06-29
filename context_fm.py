@@ -41,6 +41,7 @@ class CONTEXT_FM:
             self.y =tf.placeholder(tf.float32, [None, ], name = 'y')
             self.impression = tf.placeholder(tf.string, [None, ], name = 'impression')
             self.click_idx = tf.placeholder(tf.int32, shape=(), name = 'click_idx') # scalar
+            self.interaction_idx = tf.placeholder(tf.int64, shape=(), name = 'interaction_idx') # scalar
 
         with tf.name_scope('W') as scope : 
             self.W_filter = tf.Variable(tf.truncated_normal([feature_size.FILTER.value, self.W_dim]), name = 'filter')
@@ -156,15 +157,37 @@ class CONTEXT_FM:
         return loss
         #return T_exp, F_exp, TFsub, sig_TFsub, log, loss
 
-    def loss_TOP1(self, T_logit, F_logit):
+    def loss_TOP1(self, T_logit, F_logit, T_idx, F_idx):
+        '''
+        T_idx = tf.where(tf.equal(self.y, 1.0))
+        T_idx = tf.cond(tf.equal(tf.size(T_idx),0), lambda: tf.constant([0], dtype = tf.int64), lambda: T_idx)
+        F_inds = tf.where(tf.not_equal(self.y, 1.0))
+        F_inds = tf.cond(tf.equal(tf.size(F_inds),0), lambda: tf.constant([24], dtype = tf.int64), lambda: F_inds)
+        tensor_1 = tf.ones_like(F_inds, dtype = tf.float32)
+        #order_diff = (tf.to_float(T_idx[-1]) - tf.to_float(F_inds) +  48.0) / 24.0
+        order_diff = (24.0 - tf.to_float(F_inds) + 24) / 24.0
+        penalty = tf.where(tf.greater(order_diff, 1.0), order_diff, tensor_1) #(# of F)
+        #penalty_exp = tf.expand_dims(penalty, 1) #(# of F, 1)
+        '''
+        '''
+        norm_price = -self.price/ tf.maximum(tf.reduce_max(tf.abs(self.price)) , 1000)
+        sig_price = tf.sigmoid(norm_price)
+        F_sig_price = tf.boolean_mask(sig_price, F_idx)
+        price_penalty = tf.cond(tf.equal(tf.size(F_sig_price),0), lambda: tf.constant([1.0]), lambda: F_sig_price)
+        price_penalty = tf.expand_dims(price_penalty, 1) # (# of F, 1)
+        '''
+
         F_exp = tf.expand_dims(F_logit, 1) # (# of F, 1)
         T_exp = tf.expand_dims(T_logit, 0) # (1, # of T)
 
         TFsub = tf.subtract(F_exp, T_exp) # (# of F, # of T)
         TFsub_reg = tf.sigmoid(TFsub) + tf.sigmoid(tf.square(F_exp)) # (# of F, # of T)
+        #TFsub_reg = penalty * (tf.sigmoid(TFsub) + tf.sigmoid(tf.square(F_exp))) # (# of F, # of T)
+        #TFsub_reg = price_penalty * (tf.sigmoid(TFsub) + tf.sigmoid(tf.square(F_exp))) # (# of F, # of T)
 
         loss  = tf.reduce_mean(TFsub_reg) # scalar
         #return loss
+        #return T_exp, F_exp, TFsub, TFsub_reg, loss
         return T_exp, F_exp, TFsub, TFsub_reg, loss
 
     @lazy_property
@@ -179,28 +202,60 @@ class CONTEXT_FM:
         T_idx = tf.equal(self.y, 1.0) # (# of T, )
         F_idx = tf.not_equal(self.y, 1.0) # (# of F)
         #T_logit = tf.boolean_mask(self.logits, T_idx)# (# of T, )
+
+        '''
+        norm_price = self.price/ tf.maximum(tf.reduce_max(tf.abs(self.price)) , 1000)
+        norm_logit = -norm_price * norm_logit 
+        '''
+
         T_logit = tf.boolean_mask(norm_logit, T_idx)# (# of T, )
         T_logit = tf.cond(tf.equal(tf.size(T_logit),0), lambda: tf.constant([0.0]), lambda: T_logit)
-        #F_logit = tf.boolean_mask(self.logits, F_idx)# (# of F)
         F_logit = tf.boolean_mask(norm_logit, F_idx)# (# of F)
+
+        '''
+        F_price = tf.boolean_mask(self.price, F_idx)# (# of F)
+        price_gt_0_idx = tf.less_equal(F_price, 0.0)
+        F_logit = tf.boolean_mask(F_logit, price_gt_0_idx)# (# of F)
+        '''
+        price_gt_0_idx = tf.constant([0.0])
+
         F_logit = tf.cond(tf.equal(tf.size(F_logit),0), lambda: tf.constant([0.0]), lambda: F_logit)
+
+        '''
+        F_price = tf.boolean_mask(self.price, F_idx)
+        F_price = tf.cond(tf.equal(tf.size(F_price),0), lambda: tf.constant([1.0]), lambda: F_price)
+        F_price_gt_0 = tf.where(tf.greater_equal(F_price, 0.0), F_price, tf.zeros_like(F_price))
+        '''
+        '''
+        #F_logit = tf.where(tf.greater_equal(F_price, 0.0), F_logit, tf.zeros_like(F_price))
+        F_logit = tf.where(tf.greater_equal(F_price, 0.0), F_logit, tf.zeros_like(F_price))
+        F_logit =F_logit(1 - F_price_gt_0  
+        #F_price_gt_0 =tf.constant([0.0]) 
+        '''
+
+        '''
+        F_price = tf.boolean_mask(self.price, F_idx)
+        F_price = tf.cond(tf.equal(tf.size(F_price),0), lambda: tf.constant([1.0]), lambda: F_price)
+        F_price = F_price/ tf.maximum(tf.reduce_max(tf.abs(F_price)) , 1000)
+        F_logit = -F_price * F_logit 
+        '''
 
         if(self.loss_type == 'BPR') :
             loss = self.loss_BPR(T_logit, F_logit)  
             #T_exp, F_exp, TFsub, sig_TFsub, log, loss = self.loss_BPR(T_logit, F_logit)  
         elif(self.loss_type == 'TOP1') :
             #loss = self.loss_TOP1(T_logit, F_logit) 
-            T_exp, F_exp, TFsub, TFsub_reg, loss = self.loss_TOP1(T_logit, F_logit)  
+            T_exp, F_exp, TFsub, TFsub_reg, loss = self.loss_TOP1(T_logit, F_logit, T_idx, F_idx)  
         elif(self.loss_type == 'MS') :
             loss = self.loss_MS() 
 
         #return T_exp, F_exp, TFsub, sig_TFsub, log, loss
-        return T_exp, F_exp, TFsub, TFsub_reg, loss
+        return price_gt_0_idx, T_exp, F_exp, TFsub, TFsub_reg, loss
 
     @lazy_property
     def loss(self):
-        #_, _, _, _, _, loss = self.temp_loss
-        _, _, _, _, loss = self.temp_loss
+        _, _, _, _, _, loss = self.temp_loss
+        #_, _, _, _, loss = self.temp_loss
         return loss
 
     @lazy_property
@@ -221,10 +276,19 @@ class CONTEXT_FM:
         return self.optimizer.apply_gradients(grad_var_list) 
     
     '''
+    def new_logit(self) :
+        logit_idx = tf.where(tf.cast(tf.ones_like(self.logits), tf.bool))
+        logit_idx = tf.reshape(logit_idx, [-1, ])
+        #print('logit_idx', logit_idx)
+        dummy = tf.ones_like(self.logits, dtype = tf.float32) * -1000000.0
+        new_logits = tf.where(tf.greater_equal(logit_idx, self.interaction_idx), self.logits, dummy)
+        return new_logits
+
     @lazy_property
     def rank(self):
-        return tf.contrib.framework.argsort(self.logits, direction = 'DESCENDING')
-        #return tf.argsort(self.logits, direction = 'DESCENDING')
+        new_logits = self.new_logit()
+        return tf.contrib.framework.argsort(new_logits, direction = 'DESCENDING')
+        #return tf.contrib.framework.argsort(self.logits, direction = 'DESCENDING')
 
     @lazy_property
     def prediction(self):
